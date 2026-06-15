@@ -1,0 +1,190 @@
+# =============================================================================
+# CD Pipeline — Runs only when code is merged/pushed to main
+# Purpose: Build Docker images, push to Docker Hub, then deploy
+#
+# This pipeline runs AFTER the CI pipeline passes.
+# Note: ci.yml and cd.yml trigger independently. In production you would use
+# `workflow_run` to chain them. For this project, the branch protection rule
+# requiring CI to pass before merge ensures the correct order.
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │  CHOOSE ONE deployment option — implement only Option A or Option B     │
+# │                                                                         │
+# │  Option A — VPS/SSH (default TODOs below)                               │
+# │    Push image to Docker Hub → SSH into your server → pull & restart     │
+# │    ✔ Full control over the server                                       │
+# │    ✔ Mirrors a real production setup                                    │
+# │    ✔ Closer to what Lab 4 covers                                        │
+# │                                                                         │
+# │  Option B — Render (see bottom of this file)                            │
+# │    Push image to Docker Hub → Render detects the new image → auto-      │
+# │    deploys, no SSH needed. PostgreSQL is also provided by Render.       │
+# │    ✔ Zero server management                                             │
+# │    ✔ Free tier available                                                │
+# └─────────────────────────────────────────────────────────────────────────┘
+#
+# Your tasks (refer to Lab 4 — Continuous Deployment):
+#   1. Add Docker Hub login step
+#   2. Add build-and-push steps for backend AND frontend images
+#   3. Add your chosen deploy step (Option A or B)
+#   4. Configure all required GitHub Secrets (see each TODO below)
+# =============================================================================
+
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-push:
+    name: Build & push Docker images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── STUDENT TODO 1: Log in to Docker Hub ───────────────────────────────
+      # Use the docker/login-action action.
+      # Credentials must be stored as GitHub Secrets:
+      #   DOCKER_HUB_USERNAME — your Docker Hub username
+      #   DOCKER_HUB_TOKEN    — a Docker Hub access token (not your password)
+      # See Lab 4, Step 2 for how to create an access token.
+      #
+      # - name: Log in to Docker Hub
+      #   uses: ???
+      #   with:
+      #     username: ${{ secrets.??? }}
+      #     password: ${{ secrets.??? }}
+
+      # ── STUDENT TODO 2: Build and push backend image ────────────────────────
+      # Use docker/build-push-action.
+      # Tag format: <your-dockerhub-username>/devops-todo-backend:latest
+      # The build context is the backend/ directory.
+      # See Lab 4, Step 3.
+      #
+      # - name: Build and push backend image
+      #   uses: ???
+      #   with:
+      #     context: ???
+      #     push: true
+      #     tags: ???
+
+      # ── STUDENT TODO 3: Build and push frontend image ───────────────────────
+      # Same pattern as above but for the frontend/ directory.
+      # Tag: <your-dockerhub-username>/devops-todo-frontend:latest
+      #
+      # - name: Build and push frontend image
+      #   uses: ???
+      #   with:
+      #     context: ???
+      #     push: true
+      #     tags: ???
+
+  # ============================================================================
+  # OPTION A — Deploy via SSH to a VPS
+  # ============================================================================
+  # Use this job if you are deploying to your own server (e.g. AWS EC2,
+  # DigitalOcean Droplet, Google Cloud VM).
+  #
+  # How it works:
+  #   GitHub Actions → SSH into server → docker-compose pull → docker-compose up
+  #
+  # Required GitHub Secrets:
+  #   HOST            — public IP or hostname of your server
+  #   USERNAME        — SSH user (e.g. ubuntu, ec2-user, root)
+  #   SSH_PRIVATE_KEY — contents of your private key (~/.ssh/id_rsa)
+  #
+  # Pre-requisites on the server:
+  #   - Docker and docker-compose installed
+  #   - docker-compose.yml present at ~/app/
+  #   - Server can reach Docker Hub to pull images
+  #
+  # See Lab 4, Step 5.
+  # ============================================================================
+  deploy-ssh:
+    name: "[Option A] Deploy to server via SSH"
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      # ── STUDENT TODO 4A: Deploy via SSH ──────────────────────────────────────
+      #
+      # - name: Deploy to server via SSH
+      #   uses: appleboy/ssh-action@v1
+      #   with:
+      #     host:     ${{ secrets.HOST }}
+      #     username: ${{ secrets.USERNAME }}
+      #     key:      ${{ secrets.SSH_PRIVATE_KEY }}
+      #     script: |
+      #       cd ~/app
+      #       docker-compose pull
+      #       docker-compose up -d
+      #       echo "Deployment complete!"
+      - run: echo "Option A placeholder — replace this line with the SSH step above"
+
+  # ============================================================================
+  # OPTION B — Auto-deploy via Render (no SSH needed)
+  # ============================================================================
+  # Use this job if you are deploying to Render.com.
+  #
+  # How it works:
+  #   1. You push a Docker image to Docker Hub (TODOs 1-3 above handle this).
+  #   2. Render watches your Docker Hub repository and automatically pulls the
+  #      new image and redeploys your service — no SSH or server management.
+  #   3. PostgreSQL is also hosted on Render (free tier available).
+  #
+  # Full flow:
+  #   Push to main → CI tests pass → CD builds image → pushes to Docker Hub
+  #   → Render detects new image → Render redeploys automatically
+  #
+  # One-time setup on Render (do this in the Render dashboard, not in code):
+  #   1. Create a new PostgreSQL database on Render.
+  #      Render gives you a connection string — note the host, port, user,
+  #      password, and database name; you will need them in step 3.
+  #   2. Create a new Web Service for the backend:
+  #        Source:      Docker Hub image
+  #        Image:       <your-dockerhub-username>/devops-todo-backend:latest
+  #        Port:        8080
+  #      Add environment variables (from the PostgreSQL connection string):
+  #        DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+  #   3. Create a new Web Service for the frontend:
+  #        Source:      Docker Hub image
+  #        Image:       <your-dockerhub-username>/devops-todo-frontend:latest
+  #        Port:        3000
+  #      Add environment variable:
+  #        REACT_APP_API_URL = https://<your-backend-service>.onrender.com
+  #   4. Enable "Auto-Deploy" on both services:
+  #        In each service's Settings → "Deploy hook" or "Auto-deploy from
+  #        registry" → enable it. Render will poll Docker Hub for new images.
+  #
+  # Triggering a redeploy from GitHub Actions (optional):
+  #   Instead of relying on Render polling Docker Hub, you can trigger a
+  #   redeploy immediately using a Render Deploy Hook URL.
+  #   In Render dashboard → service → Settings → Deploy Hook → copy the URL.
+  #   Add it as a GitHub Secret named RENDER_DEPLOY_HOOK_BACKEND (and _FRONTEND).
+  #   Then add steps like:
+  #
+  #   Required GitHub Secrets (Render option):
+  #     RENDER_DEPLOY_HOOK_BACKEND  — Deploy Hook URL for the backend service
+  #     RENDER_DEPLOY_HOOK_FRONTEND — Deploy Hook URL for the frontend service
+  #
+  # ── STUDENT TODO 4B: Trigger Render redeploy via Deploy Hook ───────────────
+  #
+  # deploy-render:
+  #   name: "[Option B] Trigger Render redeploy"
+  #   runs-on: ubuntu-latest
+  #   needs: build-and-push
+  #
+  #   steps:
+  #     - name: Trigger backend redeploy on Render
+  #       run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}"
+  #
+  #     - name: Trigger frontend redeploy on Render
+  #       run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}"
+  #
+  # If you choose Render's automatic polling instead of deploy hooks,
+  # you can skip this job entirely — Render will redeploy on its own
+  # within a few minutes of a new image being pushed to Docker Hub.
+  # ============================================================================

@@ -1,0 +1,84 @@
+# =============================================================================
+# CI Pipeline — Runs on every push and pull request to main
+# Purpose: Install dependencies and run automated tests
+#
+# This file is pre-configured. Your tasks:
+#   1. Fix the 6 bugs in backend/server.js so all 7 backend tests pass
+#   2. Uncomment the Frontend section below once your frontend tests are ready
+#
+# See: Lab 3 — Continuous Integration with GitHub Actions
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # Spin up a real PostgreSQL database for integration tests
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB:       bugdb
+          POSTGRES_USER:     postgres
+          POSTGRES_PASSWORD: bugpassword
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Backend ────────────────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: backend
+        env:
+          DB_HOST:     localhost
+          DB_PORT:     5432
+          DB_NAME:     bugdb
+          DB_USER:     postgres
+          DB_PASSWORD: bugpassword
+          PORT:        8080
+        run: npm test
+
+      # ── Frontend ───────────────────────────────────────────────────────────
+      # STUDENT TODO: Uncomment this section to enable frontend tests in CI.
+      # Do this after you have verified that `npm test` passes locally in
+      # the frontend/ directory.
+      #
+      # - name: Set up Node.js (frontend)
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '18'
+      #     cache: 'npm'
+      #     cache-dependency-path: frontend/package-lock.json
+      #
+      # - name: Install frontend dependencies
+      #   working-directory: frontend
+      #   run: npm ci
+      #
+      # - name: Run frontend tests
+      #   working-directory: frontend
+      #   run: npm test

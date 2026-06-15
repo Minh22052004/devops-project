@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Environment files - NEVER commit these!
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+build/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker
+.docker/
+
+# OS files
+.DS_Store
+Thumbs.db
