@@ -5,6 +5,9 @@
 > **Clone or fork this repo and build a complete CI/CD pipeline around the application.**
 > Assessment is on the pipeline you build — not on adding new features.
 
+## Team Members
+
+- Nguyen Duc Anh 
 ---
 
 ## Quick Start
