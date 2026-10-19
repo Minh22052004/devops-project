@@ -1,33 +1,26 @@
 # =============================================================================
-# CD Pipeline — Runs only when code is merged/pushed to main
-# Purpose: Build Docker images, push to Docker Hub, then deploy
+# CD Pipeline - runs only when code is pushed/merged to main
+# Purpose: build Docker images, push them to Docker Hub, then deploy
 #
-# This pipeline runs AFTER the CI pipeline passes.
-# Note: ci.yml and cd.yml trigger independently. In production you would use
-# `workflow_run` to chain them. For this project, the branch protection rule
-# requiring CI to pass before merge ensures the correct order.
+# ci.yml and cd.yml trigger independently. The branch protection rule (CI must
+# pass before a PR can be merged) is what guarantees broken code never reaches
+# main - and therefore never reaches this pipeline.
 #
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │  CHOOSE ONE deployment option — implement only Option A or Option B     │
-# │                                                                         │
-# │  Option A — VPS/SSH (default TODOs below)                               │
-# │    Push image to Docker Hub → SSH into your server → pull & restart     │
-# │    ✔ Full control over the server                                       │
-# │    ✔ Mirrors a real production setup                                    │
-# │    ✔ Closer to what Lab 4 covers                                        │
-# │                                                                         │
-# │  Option B — Render (see bottom of this file)                            │
-# │    Push image to Docker Hub → Render detects the new image → auto-      │
-# │    deploys, no SSH needed. PostgreSQL is also provided by Render.       │
-# │    ✔ Zero server management                                             │
-# │    ✔ Free tier available                                                │
-# └─────────────────────────────────────────────────────────────────────────┘
+# Your tasks (see Lab 3 - publish images, and Lab 4 - deployment):
+#   TODO 1  Log in to Docker Hub
+#   TODO 2  Build and push the BACKEND image
+#   TODO 3  Build and push the FRONTEND image
+#   TODO 4  Deploy - choose ONE: Option A (SSH to a VPS) or Option B (Render)
 #
-# Your tasks (refer to Lab 4 — Continuous Deployment):
-#   1. Add Docker Hub login step
-#   2. Add build-and-push steps for backend AND frontend images
-#   3. Add your chosen deploy step (Option A or B)
-#   4. Configure all required GitHub Secrets (see each TODO below)
+# Repository settings (Settings > Secrets and variables > Actions):
+#   Secrets   DOCKER_HUB_USERNAME        your Docker Hub username
+#             DOCKER_HUB_TOKEN           Docker Hub access token (NOT your password)
+#             SSH_HOST, SSH_USER, SSH_PRIVATE_KEY      Option A only
+#             RENDER_DEPLOY_HOOK_BACKEND, RENDER_DEPLOY_HOOK_FRONTEND   Option B only
+#   Variables BACKEND_URL                public URL of the backend, e.g.
+#                                        http://<server-ip>:8080 or https://<name>.onrender.com
+#                                        (a variable, not a secret: it is public and
+#                                        is baked into the frontend bundle anyway)
 # =============================================================================
 
 name: CD
@@ -35,156 +28,134 @@ name: CD
 on:
   push:
     branches: [main]
+  workflow_dispatch:      # lets you start this workflow by hand from the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false
 
 jobs:
   build-and-push:
-    name: Build & push Docker images
+    name: Build and push images
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      # ── STUDENT TODO 1: Log in to Docker Hub ───────────────────────────────
-      # Use the docker/login-action action.
-      # Credentials must be stored as GitHub Secrets:
-      #   DOCKER_HUB_USERNAME — your Docker Hub username
-      #   DOCKER_HUB_TOKEN    — a Docker Hub access token (not your password)
-      # See Lab 4, Step 2 for how to create an access token.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # -- STUDENT TODO 1: Log in to Docker Hub --------------------------------
+      # Use docker/login-action@v4 with
+      #   username: ${{ secrets.DOCKER_HUB_USERNAME }}
+      #   password: ${{ secrets.DOCKER_HUB_TOKEN }}
       #
       # - name: Log in to Docker Hub
       #   uses: ???
       #   with:
-      #     username: ${{ secrets.??? }}
-      #     password: ${{ secrets.??? }}
+      #     username: ???
+      #     password: ???
 
-      # ── STUDENT TODO 2: Build and push backend image ────────────────────────
-      # Use docker/build-push-action.
-      # Tag format: <your-dockerhub-username>/devops-todo-backend:latest
-      # The build context is the backend/ directory.
-      # See Lab 4, Step 3.
+      # -- STUDENT TODO 2: Build and push the backend image ---------------------
+      # Use docker/build-push-action@v7, context ./backend, push: true.
+      # Tag with BOTH :latest and the commit SHA (${{ github.sha }}) so every
+      # deployment can be traced and rolled back:
+      #   <your-dockerhub-username>/bug-tracker-backend:latest
+      #   <your-dockerhub-username>/bug-tracker-backend:${{ github.sha }}
       #
       # - name: Build and push backend image
       #   uses: ???
       #   with:
       #     context: ???
       #     push: true
-      #     tags: ???
+      #     tags: |
+      #       ???
 
-      # ── STUDENT TODO 3: Build and push frontend image ───────────────────────
-      # Same pattern as above but for the frontend/ directory.
-      # Tag: <your-dockerhub-username>/devops-todo-frontend:latest
+      # -- STUDENT TODO 3: Build and push the frontend image --------------------
+      # Same pattern, context ./frontend, image name bug-tracker-frontend.
+      # REACT_APP_API_URL is baked into the JavaScript at BUILD time, so pass it
+      # as a build argument:
+      #   build-args: |
+      #     REACT_APP_API_URL=${{ vars.BACKEND_URL }}
       #
       # - name: Build and push frontend image
       #   uses: ???
       #   with:
       #     context: ???
       #     push: true
-      #     tags: ???
+      #     build-args: |
+      #       ???
+      #     tags: |
+      #       ???
 
-  # ============================================================================
-  # OPTION A — Deploy via SSH to a VPS
-  # ============================================================================
-  # Use this job if you are deploying to your own server (e.g. AWS EC2,
-  # DigitalOcean Droplet, Google Cloud VM).
+  # ===========================================================================
+  # OPTION A - Deploy to your own server via SSH
+  # ===========================================================================
+  # GitHub Actions -> SSH into the server -> docker compose pull -> up -d
   #
-  # How it works:
-  #   GitHub Actions → SSH into server → docker-compose pull → docker-compose up
+  # Pre-requisites on the server (Lab 4 - SSH):
+  #   - Docker Engine + the docker compose plugin installed
+  #   - the repository cloned to ~/app with a .env file next to docker-compose.yml
+  #   - ports 3000 and 8080 open in the cloud firewall / security group
   #
-  # Required GitHub Secrets:
-  #   HOST            — public IP or hostname of your server
-  #   USERNAME        — SSH user (e.g. ubuntu, ec2-user, root)
-  #   SSH_PRIVATE_KEY — contents of your private key (~/.ssh/id_rsa)
-  #
-  # Pre-requisites on the server:
-  #   - Docker and docker-compose installed
-  #   - docker-compose.yml present at ~/app/
-  #   - Server can reach Docker Hub to pull images
-  #
-  # See Lab 4, Step 5.
-  # ============================================================================
+  # Tip: the server .env holds IMAGE_TAG; write the new tag there before
+  # `docker compose pull` so the server runs exactly the image just built.
+  # ===========================================================================
   deploy-ssh:
     name: "[Option A] Deploy to server via SSH"
     runs-on: ubuntu-latest
     needs: build-and-push
+    timeout-minutes: 10
 
     steps:
-      # ── STUDENT TODO 4A: Deploy via SSH ──────────────────────────────────────
+      # -- STUDENT TODO 4A: Deploy via SSH --------------------------------------
+      # Use appleboy/ssh-action@v1 with host/username/key from the secrets
+      # SSH_HOST / SSH_USER / SSH_PRIVATE_KEY. Start the script with `set -e`
+      # so the job fails if any command fails, then:
+      #   cd ~/app
+      #   git pull --ff-only origin main
+      #   (update IMAGE_TAG in .env)
+      #   docker compose -f docker-compose.yml pull
+      #   docker compose -f docker-compose.yml up -d --no-build --remove-orphans
       #
-      # - name: Deploy to server via SSH
-      #   uses: appleboy/ssh-action@v1
-      #   with:
-      #     host:     ${{ secrets.HOST }}
-      #     username: ${{ secrets.USERNAME }}
-      #     key:      ${{ secrets.SSH_PRIVATE_KEY }}
-      #     script: |
-      #       cd ~/app
-      #       docker-compose pull
-      #       docker-compose up -d
-      #       echo "Deployment complete!"
-      - run: echo "Option A placeholder — replace this line with the SSH step above"
+      # Finish with a smoke test: curl -fsS "${{ vars.BACKEND_URL }}/health"
+      - run: echo "Option A placeholder - replace this line with your SSH deploy step"
 
-  # ============================================================================
-  # OPTION B — Auto-deploy via Render (no SSH needed)
-  # ============================================================================
-  # Use this job if you are deploying to Render.com.
+  # ===========================================================================
+  # OPTION B - Deploy on Render (no SSH needed)
+  # ===========================================================================
+  # One-time setup in the Render dashboard (not in code):
+  #   1. Create a PostgreSQL database; load database/database.sql into it.
+  #   2. Create a Web Service for the backend from the Docker Hub image
+  #      <user>/bug-tracker-backend:latest (port 8080) with the DB_* variables.
+  #   3. Create a Web Service for the frontend from <user>/bug-tracker-frontend:latest
+  #      (port 3000).
+  #   4. Copy each service's Deploy Hook URL into the secrets
+  #      RENDER_DEPLOY_HOOK_BACKEND / RENDER_DEPLOY_HOOK_FRONTEND.
   #
-  # How it works:
-  #   1. You push a Docker image to Docker Hub (TODOs 1-3 above handle this).
-  #   2. Render watches your Docker Hub repository and automatically pulls the
-  #      new image and redeploys your service — no SSH or server management.
-  #   3. PostgreSQL is also hosted on Render (free tier available).
+  # Render does not poll Docker Hub for new image tags; the deploy hook is how
+  # CD tells Render to pull the new image (see Lab 4 - PaaS).
   #
-  # Full flow:
-  #   Push to main → CI tests pass → CD builds image → pushes to Docker Hub
-  #   → Render detects new image → Render redeploys automatically
-  #
-  # One-time setup on Render (do this in the Render dashboard, not in code):
-  #   1. Create a new PostgreSQL database on Render.
-  #      Render gives you a connection string — note the host, port, user,
-  #      password, and database name; you will need them in step 3.
-  #   2. Create a new Web Service for the backend:
-  #        Source:      Docker Hub image
-  #        Image:       <your-dockerhub-username>/devops-todo-backend:latest
-  #        Port:        8080
-  #      Add environment variables (from the PostgreSQL connection string):
-  #        DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-  #   3. Create a new Web Service for the frontend:
-  #        Source:      Docker Hub image
-  #        Image:       <your-dockerhub-username>/devops-todo-frontend:latest
-  #        Port:        3000
-  #      Add environment variable:
-  #        REACT_APP_API_URL = https://<your-backend-service>.onrender.com
-  #   4. Enable "Auto-Deploy" on both services:
-  #        In each service's Settings → "Deploy hook" or "Auto-deploy from
-  #        registry" → enable it. Render will poll Docker Hub for new images.
-  #
-  # Triggering a redeploy from GitHub Actions (optional):
-  #   Instead of relying on Render polling Docker Hub, you can trigger a
-  #   redeploy immediately using a Render Deploy Hook URL.
-  #   In Render dashboard → service → Settings → Deploy Hook → copy the URL.
-  #   Add it as a GitHub Secret named RENDER_DEPLOY_HOOK_BACKEND (and _FRONTEND).
-  #   Then add steps like:
-  #
-  #   Required GitHub Secrets (Render option):
-  #     RENDER_DEPLOY_HOOK_BACKEND  — Deploy Hook URL for the backend service
-  #     RENDER_DEPLOY_HOOK_FRONTEND — Deploy Hook URL for the frontend service
-  #
-  # ── STUDENT TODO 4B: Trigger Render redeploy via Deploy Hook ───────────────
+  # STUDENT TODO 4B: uncomment and adapt (add `if: ...` or delete the job you
+  # do not use - a job whose secret is missing will fail).
   #
   # deploy-render:
-  #   name: "[Option B] Trigger Render redeploy"
+  #   name: "[Option B] Trigger Render deploy"
   #   runs-on: ubuntu-latest
   #   needs: build-and-push
-  #
+  #   timeout-minutes: 5
   #   steps:
-  #     - name: Trigger backend redeploy on Render
-  #       run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}"
+  #     - name: Trigger backend deploy
+  #       env:
+  #         HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}
+  #       run: curl -fsS -X POST "$HOOK_URL"
   #
-  #     - name: Trigger frontend redeploy on Render
-  #       run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}"
-  #
-  # If you choose Render's automatic polling instead of deploy hooks,
-  # you can skip this job entirely — Render will redeploy on its own
-  # within a few minutes of a new image being pushed to Docker Hub.
-  # ============================================================================
+  #     - name: Trigger frontend deploy
+  #       env:
+  #         HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}
+  #       run: curl -fsS -X POST "$HOOK_URL"

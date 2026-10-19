@@ -6,7 +6,8 @@
 # 1. Frontend service:
 #    - Build from ./frontend directory
 #    - Expose port 3000
-#    - Should depend on backend
+#    - Pass REACT_APP_API_URL as a build arg (default http://localhost:8080)
+#    - Should depend on backend being healthy (condition: service_healthy)
 #
 # 2. Backend service:
 #    - Build from ./backend directory
@@ -17,7 +18,9 @@
 #
 # 3. Postgres service:
 #    - Use postgres:15-alpine image
-#    - Set POSTGRES_DB=bugdb, POSTGRES_USER=postgres, POSTGRES_PASSWORD=bugpassword
+#    - Set POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD from the .env file
+#      (copy .env.example to .env; use ${DB_NAME} etc. - no hard-coded passwords)
+#    - Publish 5432:5432 so you can run the backend tests from your laptop
 #    - Use a named volume for data persistence
 #    - Mount the init script from ./database/database.sql
 #    - Add a healthcheck
@@ -27,17 +30,16 @@
 # Hints:
 # - Research: "docker-compose healthcheck"
 # - Research: "docker-compose depends_on condition"
-# - Database env vars: DB_HOST=postgres, DB_PORT=5432, DB_NAME=bugdb, DB_USER=postgres, DB_PASSWORD=bugpassword
+# - Database env vars for the backend: DB_HOST=postgres, DB_PORT=5432, and DB_NAME / DB_USER / DB_PASSWORD from .env
+# - The top-level 'version:' key is obsolete in Compose v2 - do not add it
 #
 # Example healthcheck:
 #   healthcheck:
-#      test: ['CMD-SHELL', 'pg_isready -U postgres']
+#      test: ['CMD-SHELL', 'pg_isready -U postgres -d bugdb']
 #      interval: 10s
 #      timeout: 5s
 #      retries: 5
 # ===========================================
-
-version: '3.8'
 
 services:
   # STUDENT TODO: Define frontend service

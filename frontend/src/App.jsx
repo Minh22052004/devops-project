@@ -143,30 +143,19 @@ function App() {
     }
   };
 
-  // STUDENT TODO: implement deleteBug
+  // OPTIONAL CHALLENGE 1 (bonus): implement deleteBug
   // Call DELETE /api/bugs/:id, then call fetchBugs() to refresh the list.
   const deleteBug = async (id) => {
     // TODO: your code here
   };
 
-  // STUDENT TODO: implement updateBug
-  // Call PUT /api/bugs/:id with the updated status, then call fetchBugs().
-  // Toggle between 'open' and 'closed', or cycle open → in_progress → closed → open.
-  const updateBug = async (bug) => {
+  // OPTIONAL CHALLENGE 2 (bonus): implement cycleStatus
+  // Call PUT /api/bugs/:id with { title: bug.title, status: <next status> }, then fetchBugs().
+  // The status cycles open -> in_progress -> closed -> open.
+  // Hint: const STATUS_CYCLE = { open: 'in_progress', in_progress: 'closed', closed: 'open' };
+  const cycleStatus = async (bug) => {
     // TODO: your code here
   };
-
-  // OPTIONAL CHALLENGE: implement cycleStatus (full 3-state cycle)
-  // const STATUS_CYCLE = { open: 'in_progress', in_progress: 'closed', closed: 'open' };
-  // const cycleStatus = async (bug) => {
-  //   const nextStatus = STATUS_CYCLE[bug.status];
-  //   await fetch(`${API_URL}/api/bugs/${bug.id}`, {
-  //     method: 'PUT',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body: JSON.stringify({ title: bug.title, status: nextStatus }),
-  //   });
-  //   fetchBugs();
-  // };
 
   // ── Pagination ──────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(bugs.length / BUGS_PER_PAGE));
@@ -255,15 +244,13 @@ function App() {
 
                   {/* Actions */}
                   <div style={S.actions}>
-                    {/* STUDENT TODO: Replace this placeholder with a real Update button */}
-                    {/* that calls updateBug(bug) to change the status */}
+                    {/* OPTIONAL CHALLENGE 2: replace this span with a button that calls */}
+                    {/* cycleStatus(bug) - its label should show the status or the next action */}
                     <span style={{ fontSize: '18px' }}>
                       {bug.status === 'closed' ? '✅' : bug.status === 'in_progress' ? '🔄' : '🔴'}
                     </span>
 
-                    {/* STUDENT TODO: Add a Delete button that calls deleteBug(bug.id) */}
-
-                    {/* OPTIONAL CHALLENGE: replace the span above with a cycleStatus button */}
+                    {/* OPTIONAL CHALLENGE 1: add a Delete button that calls deleteBug(bug.id) */}
                   </div>
 
                 </li>

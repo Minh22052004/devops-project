@@ -4,17 +4,18 @@
 #
 # Requirements:
 # 1. Stage 1 (builder):
-#    - Use node:18-alpine as base
+#    - Use node:24-alpine as base
 #    - Set working directory
 #    - Copy package files and install ALL dependencies
 #    - Copy source code
 #
 # 2. Stage 2 (production):
-#    - Use node:18-alpine as base
+#    - Use node:24-alpine as base
 #    - Set working directory
 #    - Copy only package files from builder
 #    - Install ONLY production dependencies (hint: npm ci --omit=dev)
 #    - Copy application code from builder
+#    - Run as the non-root user (USER node) and set NODE_ENV=production
 #    - Expose the correct port
 #    - Set the start command
 #

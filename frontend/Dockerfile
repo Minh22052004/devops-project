@@ -5,13 +5,14 @@
 # Requirements:
 # 1. Must use multi-stage build
 # 2. Stage 1 (builder):
-#    - Use node:18-alpine
+#    - Use node:24-alpine
 #    - Install dependencies with npm ci
+#    - Accept the backend URL as a build ARG: ARG REACT_APP_API_URL (baked in at build time)
 #    - Build the React app with npm run build
 #
 # 3. Stage 2 (production):
-#    - Use node:18-alpine
-#    - Install 'serve' package globally to serve static files
+#    - Use node:24-alpine
+#    - Install 'serve' globally (pin the major version, e.g. serve@14)
 #    - Copy only the build folder from builder stage
 #    - Expose port 3000
 #    - Use serve to run the app

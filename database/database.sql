@@ -1,7 +1,7 @@
 -- Database initialization script
 -- This file runs automatically when the postgres container starts for the first time.
 -- If you modify it after the container has already started, run:
---   docker-compose down -v && docker-compose up -d
+--   docker compose down -v && docker compose up -d
 
 CREATE TABLE IF NOT EXISTS bugs (
   id         SERIAL PRIMARY KEY,
