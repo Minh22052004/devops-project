@@ -14,7 +14,7 @@ const pool = new Pool({
   user:     process.env.DB_USER     || 'postgres',
   host:     process.env.DB_HOST     || 'localhost',
   database: process.env.DB_NAME     || 'bugdb',
-  password: process.env.DB_PASSWORD || 'wrongpassword',
+  password: process.env.DB_PASSWORD || 'bugpassword',
   port:     parseInt(process.env.DB_PORT) || 5432,
 });
 
@@ -49,9 +49,9 @@ app.post('/api/bugs', async (req, res) => {
     const { title, status = 'open' } = req.body;
 
     // STUDENT FIX: Add validation here
-    // if (!title || !title.trim()) {
-    //   return res.status(400).json({ error: 'Title is required' });
-    // }
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
 
     const result = await pool.query(
       'INSERT INTO bugs (title, status) VALUES ($1, $2) RETURNING *',
@@ -67,6 +67,17 @@ app.post('/api/bugs', async (req, res) => {
 // STUDENT TODO: Implement DELETE /api/bugs/:id
 //   - Query: DELETE FROM bugs WHERE id = $1 RETURNING *
 //   - Return 200 with the deleted row, or 404 if not found.
+app.delete('/api/bugs/:id', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM bugs WHERE id = $1 RETURNING *', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // BUG #4: PUT endpoint is missing — but tests expect it!
 // STUDENT TODO: Implement PUT /api/bugs/:id
@@ -79,6 +90,22 @@ app.post('/api/bugs', async (req, res) => {
 //   and store it in the database.  severity must be one of:
 //   'low', 'medium', 'high', 'critical'
 
+app.put('/api/bugs/:id', async (req, res) => {
+  try {
+    const { title, status } = req.body;
+    const result = await pool.query(
+      'UPDATE bugs SET title = COALESCE($1, title), status = COALESCE($2, status) WHERE id = $3 RETURNING *',
+      [title, status, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Server startup ───────────────────────────────────────────────────────────
 // BUG #5: Server starts unconditionally — this causes a port conflict when Jest
 //   imports this file, because supertest also binds a port.
@@ -86,10 +113,12 @@ app.post('/api/bugs', async (req, res) => {
 //   entry-point, not when it is require()-d by a test.
 //   Hint: if (require.main === module) { app.listen(...) }
 const port = process.env.PORT || 8080;
-app.listen(port, () => {
-  console.log(`Bug Tracker backend running on port ${port}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Bug Tracker backend running on port ${port}`);
+  });
+}
 
 // BUG #6: App is not exported — tests cannot import it!
 // STUDENT FIX: Add the line below (remove the comment characters):
-// module.exports = app;
+module.exports = app;
